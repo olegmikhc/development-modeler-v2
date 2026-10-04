@@ -1,0 +1,10 @@
+create table public.model_shares(id uuid primary key default gen_random_uuid(),model_id uuid not null references public.financial_models(id) on delete cascade,token_hash text not null unique,expires_at timestamptz not null,created_by uuid not null default auth.uid() references auth.users(id),created_at timestamptz not null default now());
+alter table public.model_shares enable row level security;
+create policy shares_owner_read on public.model_shares for select using(exists(select 1 from public.financial_models m where m.id=model_id and public.can_edit_org(m.organization_id)));
+create policy shares_owner_delete on public.model_shares for delete using(exists(select 1 from public.financial_models m where m.id=model_id and public.can_edit_org(m.organization_id)));
+create or replace function public.create_model_share(model_uuid uuid) returns text language plpgsql security definer set search_path=public,extensions as $$ declare token text;org uuid;begin select organization_id into org from financial_models where id=model_uuid;if not public.can_edit_org(org) then raise exception 'Editor access required';end if;token=encode(gen_random_bytes(32),'hex');insert into model_shares(model_id,token_hash,expires_at) values(model_uuid,encode(digest(token,'sha256'),'hex'),now()+interval '7 days');return token;end $$;
+revoke all on function public.create_model_share(uuid) from public;
+grant execute on function public.create_model_share(uuid) to authenticated;
+create or replace function public.read_shared_model(share_token text) returns jsonb language sql stable security definer set search_path=public,extensions as $$ select m.data from model_shares s join financial_models m on m.id=s.model_id where s.token_hash=encode(digest(share_token,'sha256'),'hex') and s.expires_at>now() limit 1 $$;
+revoke all on function public.read_shared_model(text) from public;
+grant execute on function public.read_shared_model(text) to anon,authenticated;

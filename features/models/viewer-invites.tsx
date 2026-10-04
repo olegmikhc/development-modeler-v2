@@ -1,0 +1,12 @@
+'use client';
+import {useEffect,useState} from 'react';
+import {supabase} from '@/lib/supabase';
+import {appPath} from '@/lib/app-path';
+import {tr,useLanguage} from '@/lib/i18n';
+export function ViewerInvites({modelId}:{modelId:string}){
+ useLanguage();const [email,setEmail]=useState(''),[rows,setRows]=useState<{email:string}[]>([]),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[manager,setManager]=useState(false);
+ const load=async()=>{const sb=supabase();if(!sb)return;const permission=await sb.rpc('manages_model',{mid:modelId});setManager(permission.data===true);if(!permission.data)return;const {data,error}=await sb.from('model_viewer_invites').select('email').eq('model_id',modelId);if(error)setMessage(tr('Invitation access is not available yet.'));else setRows(data||[])};
+ useEffect(()=>{void load()},[modelId]);
+ const run=async(recipient:string,revoke=false)=>{setBusy(true);setMessage('');try{const {error}=await supabase()!.rpc(revoke?'revoke_model_viewer':'invite_model_viewer',{mid:modelId,recipient});if(error)throw Error(error.message);setEmail('');await load();setMessage(tr(revoke?'Access revoked. Existing independent copies are retained.':'Access granted. Send your friend the invited models link. No email is sent automatically.'));}catch(e){setMessage(e instanceof Error?e.message:String(e))}finally{setBusy(false)}};
+ return <section className="stack"><h3>{tr('View and create own copy')}</h3><p>{tr('Invite by email. After verification, your friend can view this model and edit an independent copy. The original stays read-only.')}</p>{manager&&<><form className="row" style={{flexWrap:'wrap'}} onSubmit={e=>{e.preventDefault();void run(email)}}><input aria-label={tr('Friend’s email')} type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="friend@example.com"/><button className="btn dark" disabled={busy}>{tr('Grant access')}</button></form>{rows.map(row=><div key={row.email} className="row spread"><span>{row.email}</span><button className="btn" disabled={busy} onClick={()=>run(row.email,true)}>{tr('Revoke access')}</button></div>)}<button className="btn" onClick={()=>{const local=['localhost','127.0.0.1'].includes(location.hostname);const url=local?'https://olegmikhc.github.io/development-modeler/invited/':`${location.origin}${appPath('/invited/')}`;navigator.clipboard.writeText(url).then(()=>setMessage(tr('Link copied.'))).catch(()=>setMessage(url))}}>{tr('Copy invited models link')}</button></>}{message&&<p role="status">{message}</p>}</section>;
+}

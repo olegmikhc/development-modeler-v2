@@ -1,0 +1,19 @@
+import {describe,it,expect} from 'vitest';
+import {demoModel} from '@/lib/demo';
+import {defaultMarket,solveTarget,scopedResult,matrix} from './sensitivity';
+import {calculateSalesPlan,calculateProjectCashFlow,calculatePortfolioCashFlow} from './financial-engine';
+import {neutral} from '@/types/model';
+const setup=()=>{const m=demoModel();m.projects=m.projects.map(p=>({...p,market:defaultMarket()}));return m};
+describe('2.0 sensitivity',()=>{
+ it('neutral market preserves existing economics',()=>{const old=demoModel(),m=structuredClone(old);m.projects.forEach(p=>p.market=defaultMarket());const before=calculatePortfolioCashFlow(old),after=calculatePortfolioCashFlow(m);expect(after.revenue).toBe(before.revenue);expect(after.cost).toBe(before.cost);expect(after.months).toEqual(before.months)});
+ it('a demand pause delays sales without losing units or revenue',()=>{const p=setup().projects[0],before=calculateSalesPlan(p);p.market!.demand=Array(12).fill(0);const after=calculateSalesPlan(p);expect(after.reduce((n,x)=>n+x.units,0)).toBe(before.reduce((n,x)=>n+x.units,0));expect(after.reduce((n,x)=>n+x.value,0)).toBe(before.reduce((n,x)=>n+x.value,0));expect(Math.min(...after.map(x=>x.month))).toBeGreaterThan(12)});
+ it('slowdown increases holding costs and retains all collections',()=>{const p=setup().projects[0];p.market!.holdingMonthly=10000;const base=calculateProjectCashFlow(p),slow=calculateProjectCashFlow(p,{...neutral,speed:-50});expect(slow.duration).toBeGreaterThan(base.duration);expect(slow.cost).toBeGreaterThan(base.cost);expect(slow.months.reduce((n,x)=>n+x.inflow,0)).toBeCloseTo(slow.revenue,1)});
+ it('locked months ignore scenario price, speed and future price input',()=>{const p=setup().projects[0];p.market!.lockedThrough=8;const before=calculateSalesPlan(p).filter(x=>x.month<=8);p.market!.priceFactor=2;const after=calculateSalesPlan(p,{...neutral,price:-30,speed:-50}).filter(x=>x.month<=8);expect(after).toEqual(before)});
+ it('monthly price affects only contracts signed in that month',()=>{const p=setup().projects[0],before=calculateSalesPlan(p);p.market!.prices=Array(6).fill(100);p.market!.prices[4]=120;const after=calculateSalesPlan(p);after.forEach((x,i)=>expect(x.value).toBeCloseTo(before[i].value*(x.month===5?1.2:1),1))});
+ it('goal seek includes percent revenue costs and fixed contracts',()=>{const m=setup();m.projects[0].market!.lockedThrough=8;const g=solveTarget(m,'portfolio',neutral,35);expect(g.status).toBe('ok');expect(scopedResult(m,'portfolio',{...neutral,price:g.adjustment}).margin).toBeCloseTo(.35,5)});
+ it('project-specific scenarios leave other projects unchanged',()=>{const m=setup();const base=calculatePortfolioCashFlow(m);const changed=calculatePortfolioCashFlow(m,{...neutral,price:20,speed:-20,projectId:m.projects[0].id});expect(changed.projects[1]).toEqual(base.projects[1]);expect(changed.projects[0].revenue).toBeGreaterThan(base.projects[0].revenue)});
+ it('returns no inventory when all sales are locked',()=>{const m=setup();m.projects.forEach(p=>p.market!.lockedThrough=120);expect(solveTarget(m,'portfolio',neutral,30).status).toBe('no-inventory')});
+ it('flags an impossible margin with 100% revenue tax',()=>{const m=setup();m.projects.forEach(p=>p.costs.push({id:'tax',name:'Tax',driver:'% Revenue',amount:100,timing:'At Handover',start:1,duration:1}));expect(solveTarget(m,'portfolio',neutral,30).status).toBe('unreachable')});
+ it('matrix center equals selected scenario',()=>{const m=setup(),a={...neutral,price:10,speed:15};expect(matrix(m,'portfolio',a)[2][2].result).toEqual(scopedResult(m,'portfolio',a))});
+ it('zero demand for four years extends beyond display horizon',()=>{const m=setup();m.projects[0].market!.demand=Array(48).fill(0);const r=calculatePortfolioCashFlow(m);expect(r.months.length).toBeGreaterThan(48);expect(r.months.reduce((n,x)=>n+x.inflow,0)).toBeCloseTo(r.revenue,1)});
+});

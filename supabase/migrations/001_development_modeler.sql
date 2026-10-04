@@ -1,0 +1,44 @@
+-- Apply in Supabase SQL editor or via supabase db push.
+create extension if not exists pgcrypto;
+create table public.organizations (id uuid primary key default gen_random_uuid(),name text not null,owner_id uuid not null references auth.users(id),created_at timestamptz not null default now());
+create table public.organization_members (organization_id uuid references public.organizations(id) on delete cascade,user_id uuid references auth.users(id) on delete cascade,role text not null check (role in ('owner','editor','viewer')),primary key(organization_id,user_id));
+create or replace function public.is_org_member(org uuid) returns boolean language sql stable security definer set search_path=public as $$ select exists(select 1 from organization_members where organization_id=org and user_id=auth.uid()) $$;
+create or replace function public.can_edit_org(org uuid) returns boolean language sql stable security definer set search_path=public as $$ select exists(select 1 from organization_members where organization_id=org and user_id=auth.uid() and role in ('owner','editor')) $$;
+create table public.financial_models (id uuid primary key default gen_random_uuid(),organization_id uuid not null references public.organizations(id) on delete cascade,name text not null,data jsonb not null,revision bigint not null default 1,updated_at timestamptz not null default now(),created_at timestamptz not null default now());
+create table public.model_versions (id uuid primary key default gen_random_uuid(),model_id uuid not null references public.financial_models(id) on delete cascade,name text not null,data jsonb not null,created_by uuid default auth.uid() references auth.users(id),created_at timestamptz not null default now());
+-- Model snapshot is the atomic calculation document; normalized entities support reporting.
+create table public.projects (id uuid primary key default gen_random_uuid(),model_id uuid not null references public.financial_models(id) on delete cascade,name text not null,position int not null default 0,data jsonb not null);
+create table public.scenarios (id uuid primary key default gen_random_uuid(),model_id uuid not null references public.financial_models(id) on delete cascade,name text not null,data jsonb not null);
+create table public.project_timelines (id uuid primary key default gen_random_uuid(),project_id uuid not null unique references public.projects(id) on delete cascade,data jsonb not null);
+create table public.lands (id uuid primary key default gen_random_uuid(),project_id uuid not null unique references public.projects(id) on delete cascade,data jsonb not null);
+create table public.land_payments (id uuid primary key default gen_random_uuid(),land_id uuid not null references public.lands(id) on delete cascade,month int not null check(month>0),amount numeric(20,2) not null check(amount>=0));
+create table public.unit_types (id uuid primary key default gen_random_uuid(),project_id uuid not null references public.projects(id) on delete cascade,name text not null,area numeric not null check(area>0),quantity int not null check(quantity>=0));
+create table public.buyer_payment_plans (id uuid primary key default gen_random_uuid(),project_id uuid not null references public.projects(id) on delete cascade,data jsonb not null);
+create table public.pricing_tiers (id uuid primary key default gen_random_uuid(),unit_type_id uuid not null references public.unit_types(id) on delete cascade,payment_plan_id uuid references public.buyer_payment_plans(id),data jsonb not null);
+create table public.sales_plans (id uuid primary key default gen_random_uuid(),project_id uuid not null references public.projects(id) on delete cascade,data jsonb not null);
+create table public.sales_months (id uuid primary key default gen_random_uuid(),sales_plan_id uuid not null references public.sales_plans(id) on delete cascade,tier_id uuid not null references public.pricing_tiers(id),month int not null check(month>0),units int not null check(units>=0));
+create table public.construction_plans (id uuid primary key default gen_random_uuid(),project_id uuid not null references public.projects(id) on delete cascade,data jsonb not null);
+create table public.construction_costs (id uuid primary key default gen_random_uuid(),construction_plan_id uuid not null references public.construction_plans(id) on delete cascade,data jsonb not null);
+create table public.development_costs (id uuid primary key default gen_random_uuid(),project_id uuid not null references public.projects(id) on delete cascade,data jsonb not null);
+create table public.employees (id uuid primary key default gen_random_uuid(),project_id uuid references public.projects(id) on delete cascade,model_id uuid not null references public.financial_models(id) on delete cascade,data jsonb not null);
+create table public.shared_resources (id uuid primary key default gen_random_uuid(),model_id uuid not null references public.financial_models(id) on delete cascade,data jsonb not null);
+create table public.corporate_costs (id uuid primary key default gen_random_uuid(),model_id uuid not null references public.financial_models(id) on delete cascade,data jsonb not null);
+create table public.custom_cash_flow_items (id uuid primary key default gen_random_uuid(),model_id uuid not null references public.financial_models(id) on delete cascade,data jsonb not null);
+alter table public.organizations enable row level security;
+alter table public.organization_members enable row level security;
+alter table public.financial_models enable row level security;
+alter table public.model_versions enable row level security;
+create policy org_read on public.organizations for select using(public.is_org_member(id));
+create policy members_read on public.organization_members for select using(public.is_org_member(organization_id));
+create policy model_read on public.financial_models for select using(public.is_org_member(organization_id));
+create policy model_write on public.financial_models for all using(public.can_edit_org(organization_id)) with check(public.can_edit_org(organization_id));
+create policy version_read on public.model_versions for select using(exists(select 1 from public.financial_models m where m.id=model_id and public.is_org_member(m.organization_id)));
+create policy version_insert on public.model_versions for insert with check(exists(select 1 from public.financial_models m where m.id=model_id and public.can_edit_org(m.organization_id)));
+-- Normalized tables are inaccessible to browser clients until an atomic sync API is enabled.
+do $$ declare t text; begin foreach t in array array['projects','scenarios','project_timelines','lands','land_payments','unit_types','buyer_payment_plans','pricing_tiers','sales_plans','sales_months','construction_plans','construction_costs','development_costs','employees','shared_resources','corporate_costs','custom_cash_flow_items'] loop execute format('alter table public.%I enable row level security',t); end loop; end $$;
+create or replace function public.create_workspace(workspace_name text) returns uuid language plpgsql security definer set search_path=public as $$ declare org uuid; begin if auth.uid() is null then raise exception 'Authentication required'; end if; insert into organizations(name,owner_id) values(workspace_name,auth.uid()) returning id into org;insert into organization_members values(org,auth.uid(),'owner');return org;end $$;
+revoke all on function public.create_workspace(text) from public;
+grant execute on function public.create_workspace(text) to authenticated;
+create or replace function public.save_financial_model(model_uuid uuid,org_uuid uuid,model_name text,payload jsonb,expected_revision bigint) returns bigint language plpgsql security invoker set search_path=public as $$ declare rev bigint;begin if expected_revision=0 then insert into financial_models(id,organization_id,name,data) values(model_uuid,org_uuid,model_name,payload) returning revision into rev;else update financial_models set data=payload,name=model_name,revision=revision+1,updated_at=now() where id=model_uuid and organization_id=org_uuid and revision=expected_revision returning revision into rev;if rev is null then raise exception 'Conflict: refresh the model before saving';end if;end if;return rev;end $$;
+create index financial_models_org on public.financial_models(organization_id);
+create index model_versions_model on public.model_versions(model_id,created_at desc);

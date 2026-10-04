@@ -1,0 +1,44 @@
+{
+  "name": "development-modeler-v2",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --webpack --hostname 127.0.0.1 --port 3200",
+    "build": "node scripts/build-pages.mjs",
+    "start": "next start --hostname 127.0.0.1 --port 3200",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "build:pages": "node scripts/build-pages.mjs"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "latest",
+    "@dnd-kit/sortable": "latest",
+    "@dnd-kit/utilities": "latest",
+    "@hookform/resolvers": "latest",
+    "@supabase/supabase-js": "latest",
+    "@tailwindcss/postcss": "latest",
+    "@tanstack/react-table": "^8.21.3",
+    "class-variance-authority": "latest",
+    "clsx": "latest",
+    "exceljs": "latest",
+    "lucide-react": "latest",
+    "next": "latest",
+    "playwright": "latest",
+    "radix-ui": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "react-hook-form": "latest",
+    "recharts": "latest",
+    "tailwind-merge": "latest",
+    "tailwindcss": "latest",
+    "zod": "latest",
+    "zustand": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "typescript": "latest",
+    "vitest": "latest"
+  }
+}

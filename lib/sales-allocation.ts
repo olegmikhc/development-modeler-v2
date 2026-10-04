@@ -1,0 +1,1 @@
+export function salesAllocation(planned:number,monthly:number[]){const allocated=monthly.reduce((sum,n)=>sum+n,0),difference=allocated-planned;return {planned,allocated,difference,valid:difference===0};}

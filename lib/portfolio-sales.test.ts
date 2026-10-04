@@ -1,0 +1,8 @@
+import {expect,it} from 'vitest';
+import {demoModel} from './demo';
+import {neutral} from '@/types/model';
+import {portfolioSales,stressSales} from './portfolio-sales';
+import {calculatePortfolioCashFlow} from './financial-engine';
+const options={capacity:2,cashPercent:20,down:30,term:12,priceChange:0};
+it('caps portfolio capacity, preserves units and contract value, does not mutate input',()=>{const m=demoModel(),before=structuredClone(m),s=stressSales(m,neutral,options),rows=portfolioSales(s,neutral),base=portfolioSales(m,neutral);expect(m).toEqual(before);expect(rows.reduce((n,s)=>n+s.units,0)).toBe(base.reduce((n,s)=>n+s.units,0));expect(rows.reduce((n,s)=>n+s.value,0)).toBe(base.reduce((n,s)=>n+s.value,0));const months=new Map<number,number>();rows.forEach(s=>months.set(s.month,(months.get(s.month)||0)+s.units));expect(Math.max(...months.values())).toBeLessThanOrEqual(2);expect(rows.filter(s=>s.tier.plan.type==='Full Cash').reduce((n,s)=>n+s.units,0)).toBeLessThanOrEqual(Math.floor(rows.reduce((n,s)=>n+s.units,0)*.2));expect(calculatePortfolioCashFlow(s).months.every(m=>Number.isFinite(m.net))).toBe(true)});
+it('supports zero Full Cash and retains all units under a delayed scenario',()=>{const m=demoModel(),a={...neutral,pbgDelay:3},s=stressSales(m,a,{...options,cashPercent:0});const rows=portfolioSales(s,a);expect(rows.some(s=>s.tier.plan.type==='Full Cash')).toBe(false);expect(Math.min(...rows.map(s=>s.month))).toBeGreaterThanOrEqual(Math.min(...portfolioSales(m,a).map(s=>s.month)));expect(s.projects.flatMap(p=>p.units).every(u=>u.quantity===u.tiers.reduce((n,t)=>n+t.units,0))).toBe(true)});

@@ -1,0 +1,6 @@
+import {chromium} from 'playwright';
+import assert from 'node:assert/strict';
+const browser=await chromium.launch({headless:true});
+try{const page=await browser.newPage();await page.goto('http://127.0.0.1:3100/');await page.getByRole('button',{name:'Financial models',exact:true}).click();await page.getByRole('button',{name:'New Financial Model',exact:true}).click();await page.getByRole('button',{name:'Financial models',exact:true}).click();
+page.once('dialog',d=>d.dismiss());await page.getByRole('button',{name:'Remove model: Bali Development Portfolio',exact:true}).click();assert.equal(await page.locator('.model-card-wrapper').count(),2);
+page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Remove model: Bali Development Portfolio',exact:true}).click();assert.equal(await page.locator('.model-card-wrapper').count(),1);await page.reload();await page.getByRole('button',{name:'Financial models',exact:true}).click();assert.equal(await page.locator('.model-card-wrapper').count(),1);await page.getByText('Trash · 1',{exact:true}).click();await page.getByRole('button',{name:'Restore',exact:true}).click();assert.equal(await page.locator('.model-card-wrapper').count(),2);console.log('Delete, cancel, persistence and restore passed.');}finally{await browser.close()}

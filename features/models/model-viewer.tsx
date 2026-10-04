@@ -1,0 +1,36 @@
+'use client';
+import {AppSelect} from '@/components/ui/app-select';
+import {useMemo,useState} from 'react';
+import {FinancialModel,neutral} from '@/types/model';
+import {projectWindow,calculatePortfolioCashFlow,timeline,stageStart,calculateSalesPlan,departmentWindow} from '@/lib/financial-engine';
+import {modelMonthLabel} from '@/lib/model-calendar';
+import {money,percent,number} from '@/lib/format';
+import {tr,useLanguage} from '@/lib/i18n';
+import {LanguageSwitch} from '@/components/ui/language-switch';
+import {Dashboard} from './dashboard';
+import {CashFlowView} from '@/features/cashflow/cashflow';
+import {AnnualSales} from './annual-sales';
+
+const views=['Overview','Projects','Timeline','Sales','Costs','Employees','Cash Flow','P&L','Scenarios'];
+export function ModelViewer({model,loginUrl}:{model:FinancialModel;loginUrl?:string}){
+ useLanguage();const [view,setView]=useState('Overview'),[scenario,setScenario]=useState(model.activeScenario),[project,setProject]=useState(model.projects[0]?.id||'');
+ const shown=useMemo(()=>({...model,activeScenario:scenario}),[model,scenario]);
+ const a=model.scenarios.find(s=>s.id===scenario)?.adjustments||neutral;
+ const r=useMemo(()=>calculatePortfolioCashFlow(shown,a),[shown,a]);
+ const navigate=(v:string)=>setView(views.includes(v)?v:'Projects');
+ const open=(id:string)=>{setProject(id);setView('Projects')};
+ const p=model.projects.find(p=>p.id===project),pr=p?r.projects[model.projects.indexOf(p)]:null;
+ const label=(m:number)=>`M${m} · ${tr(modelMonthLabel(model.startDate,m))}`;
+ const table=(headers:string[],rows:(string|number)[][])=><div className="table-scroll"><table className="data-table"><thead><tr>{headers.map(h=><th key={h}>{tr(h)}</th>)}</tr></thead><tbody>{rows.map((row,i)=><tr key={i}>{row.map((v,j)=><td key={j}>{v}</td>)}</tr>)}</tbody></table></div>;
+ const horizon=Math.max(1,...model.projects.map(p=>projectWindow(p,a).end));
+ return <div className="app-shell model-viewer"><aside className="sidebar"><div className="brand"><div>finmodel<small>{tr('View only · this financial model only')}</small></div></div><nav>{views.map(v=><button key={v} className={view===v?'active':''} onClick={()=>setView(v)}>{tr(v)}</button>)}</nav>{loginUrl&&<a className="btn" href={loginUrl}>{tr('Sign in')}</a>}</aside><main><header className="topbar"><strong>{model.name}</strong><div className="row"><span className="badge">{tr('View only · this financial model only')}</span><LanguageSwitch/></div></header><div className="model-bar"><div><h2>{model.name}</h2><span className="badge">{model.currency}</span><span>{tr('Model start')}: {label(1)}</span></div><AppSelect aria-label={tr('Scenario')} value={scenario} onChange={e=>setScenario(e.target.value)}>{model.scenarios.map(s=><option key={s.id} value={s.id}>{tr(s.name)}</option>)}</AppSelect></div><div className="viewer-mobile-navigation"><label htmlFor="viewer-section">{tr('Section')}</label><AppSelect id="viewer-section" value={view} onChange={e=>setView(e.target.value)}>{views.map(v=><option key={v} value={v}>{tr(v)}</option>)}</AppSelect>{loginUrl&&<a className="btn" href={loginUrl}>{tr('Sign in')}</a>}</div><div className="content">
+ {view==='Overview'&&<Dashboard model={shown} r={r} a={a} readOnly adjust={()=>{}} add={()=>{}} edit={open} navigate={navigate}/>}
+ {(view==='Cash Flow'||view==='P&L')&&<CashFlowView model={shown} a={a} pnl={view==='P&L'}/>}
+ {view==='Projects'&&<><div className="view-title"><h1>{tr('Projects')}</h1><AppSelect aria-label={tr('Select project')} value={project} onChange={e=>setProject(e.target.value)}>{model.projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</AppSelect></div>{p&&pr&&<section className="card"><h2>{p.name}</h2><p>{p.location} · {tr(p.type)} · {tr(p.status)}</p>{table(['Units','GLA m²','Revenue','Cost','Profit','Margin'],[[pr.units,number(pr.gla),money(pr.revenue,false,model.currency),money(pr.cost,false,model.currency),money(pr.profit,false,model.currency),percent(pr.margin)]])}<p>{tr('Project margins exclude company overhead and payroll.')}</p><h3>{tr('Unit mix & pricing')}</h3>{table(['Unit type','Area','Pricing tier','Units','Price','Buyer payment plan'],p.units.flatMap(u=>u.tiers.map(t=>[u.name,u.area,t.name,t.units,money(t.price,false,model.currency),tr(t.plan.type)])))}</section>}</>}
+ {view==='Timeline'&&<><h1>{tr('Development timeline')}</h1><section className="card"><div className="table-scroll"><div style={{minWidth:200+horizon*46}}><div className="viewer-gantt-row"><b>{tr('Stage')}</b><div className="viewer-gantt-months" style={{gridTemplateColumns:`repeat(${horizon},1fr)`}}>{Array.from({length:horizon},(_,i)=><small key={i}>M{i+1}<br/>{tr(modelMonthLabel(model.startDate,i+1))}</small>)}</div></div>{model.projects.map(p=>{const t=timeline(p,a),stages=[{name:'Land',start:p.start,duration:1},{name:'PBG',start:t.pbgStart,duration:t.pbgDuration},...p.timeline.stages.map(s=>({...s,start:stageStart(p,s,a)})),{name:'Sales',start:t.salesStart,duration:t.salesDuration},{name:'Construction',start:t.constructionStart,duration:t.constructionDuration},...(p.construction.showVilla?[{name:'Show villa',start:p.construction.showVilla.start,duration:p.construction.showVilla.duration}]:[]),{name:'Handover',start:t.handover,duration:1}];return <section key={p.id}><h3>{p.name}</h3>{stages.map((s,i)=><div className="viewer-gantt-row" key={i}><span>{tr(s.name)}</span><div className="viewer-gantt-track"><span title={`${tr(s.name)}: ${label(s.start)} — ${label(s.start+s.duration-1)}`} style={{left:`${(s.start-1)/horizon*100}%`,width:`${s.duration/horizon*100}%`,background:s.name==='Sales'?'#659584':p.color}}>{s.duration}</span></div></div>)}</section>})}</div></div></section></>}
+ {view==='Sales'&&<><h1>{tr('Monthly sales')}</h1><AnnualSales months={r.months} startDate={model.startDate} onOpen={()=>setView('Cash Flow')}/><section className="card" style={{marginTop:24}}>{table(['Project',...r.months.map(m=>tr(m.label))],model.projects.map(p=>{const rows=calculateSalesPlan(p,a);return [p.name,...r.months.map(m=>rows.filter(s=>s.month===m.month).reduce((n,s)=>n+s.units,0))]}))}</section></>}
+ {view==='Costs'&&<><h1>{tr('Cost composition')}</h1><section className="card">{table(['Category','Total','% of revenue'],Object.entries(r.costs).map(([name,n])=>[tr(name),money(n,false,model.currency),r.revenue?percent(n/r.revenue):'—']))}</section></>}
+ {view==='Employees'&&<><h1>{tr('Employees')}</h1><section className="card">{table(['Department','Employee','Monthly salary','Work period'],(model.workforce?.employees||[]).map(e=>{const d=model.workforce!.departments.find(d=>d.id===e.departmentId);const w=d?departmentWindow(model,d,a):null;return [d?.name||'—',e.name||e.role,money(e.salary,false,model.currency),w?`${label(w.start)} — ${label(w.end)}`:'—']}))}</section></>}
+ {view==='Scenarios'&&<><h1>{tr('Scenarios')}</h1><section className="card">{table(['Scenario','Revenue','Profit','Margin','Peak funding'],model.scenarios.map(s=>{const result=calculatePortfolioCashFlow(model,s.adjustments);return [tr(s.name),money(result.revenue,false,model.currency),money(result.profit,false,model.currency),percent(result.margin),money(result.peak,false,model.currency)]}))}</section></>}
+ </div></main></div>;
+}
