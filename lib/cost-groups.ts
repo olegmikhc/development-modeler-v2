@@ -1,7 +1,7 @@
 const definitions=[
  {id:'land',name:'Земля',color:'#a18557',aliases:['Land Payments','Land','Платежи за землю','Земля']},
  {id:'construction',name:'Строительство и инфраструктура',color:'#007aff',aliases:['Construction','Строительство','Show villa','Шоу-вилла']},
- {id:'sales',name:'Маркетинг и продажи',color:'#7488c4',aliases:['Marketing','Sales Commission','Sales Office Fit-out','Project Packaging','Automation / CRM','Sales holding costs','Маркетинг','Комиссия продаж','Офис продаж','Упаковка проекта','Автоматизация / CRM','Содержание до продажи']},
+ {id:'sales',name:'Маркетинг и продажи',color:'#7488c4',aliases:['Marketing','Sales Manager','Менеджер по продажам','Sales Commission','Sales Office Fit-out','Project Packaging','Automation / CRM','Sales holding costs','Маркетинг','Комиссия продаж','Офис продаж','Упаковка проекта','Автоматизация / CRM','Содержание до продажи']},
  {id:'permits',name:'Разрешения и проектирование',color:'#56a6ad',aliases:['Architecture','PBG / Permits','PBG','SLF','Проектирование','PBG / Разрешения','Разрешения','Разрешительная документация']},
  {id:'management',name:'Команда и управление',color:'#af83b7',aliases:['Payroll','Office Rent','Фонд оплаты труда','Аренда офиса','Зарплаты']},
  {id:'taxes',name:'Налоги',color:'#e09a45',aliases:['Taxes','Налоги']},
