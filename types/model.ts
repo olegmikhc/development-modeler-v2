@@ -33,6 +33,7 @@ export interface Investment {
  incomePayment:'maturity'|'monthly';
  maturityMonth:number;
  autoSettle:boolean;
+ repaymentPlan?:{mode:'manual'|'equal';startMonth:number;endMonth:number};
  tranches:{id:string;month:number;amount:number}[];
  repayments:{id:string;month:number;principal:number;income:number}[];
 }

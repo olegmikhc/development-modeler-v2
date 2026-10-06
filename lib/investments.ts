@@ -8,6 +8,7 @@ export interface InvestmentMonth {
 }
 export interface InvestorCash {date:number;amount:number}
 export interface InvestmentResult {
+ equalPayment?:number;
  investment:Investment; months:InvestmentMonth[]; contributed:number; principalPaid:number;
  incomePaid:number; incomeAccrued:number; principalBalance:number; incomeBalance:number;
  annualReturn:number|null; returnStatus:string; cash:InvestorCash[]; warnings:string[];
@@ -41,7 +42,7 @@ export function annualizedReturn(input:InvestorCash[]):{value:number|null;status
  return {value,status:'Эффективная годовая доходность XIRR · ACT/365'};
 }
 
-export function calculateInvestment(inv:Investment,start:string,profitEntitlement=0):InvestmentResult {
+function calculateManualInvestment(inv:Investment,start:string,profitEntitlement=0):InvestmentResult {
  const warnings:string[]=[];
  const maturity=month(inv.maturityMonth);
  const end=Math.max(maturity,...inv.tranches.map(t=>month(t.month)),...inv.repayments.map(t=>month(t.month)));
@@ -78,6 +79,43 @@ export function calculateInvestment(inv:Investment,start:string,profitEntitlemen
  if(principal+income>.005)warnings.push('Остаются невыплаченные обязательства. Проценты после срока не начисляются; задайте новый срок или возвраты.');
  const xirr=principal+income>.005?{value:null,status:'Не задан полный возврат капитала и дохода'}:annualizedReturn(cash);
  return {investment:inv,months,contributed,principalPaid:sum(months.map(m=>m.principalPaid)),incomePaid:sum(months.map(m=>m.incomePaid)),incomeAccrued:sum(months.map(m=>m.incomeAccrued)),principalBalance:principal,incomeBalance:income,annualReturn:xirr.value,returnStatus:xirr.status,cash,warnings};
+}
+
+/** Equal total payments, interest first. Manual entries remain saved but inactive. */
+export function calculateInvestment(inv:Investment,start:string,profitEntitlement=0):InvestmentResult {
+ if(inv.repaymentPlan?.mode!=='equal')return calculateManualInvestment(inv,start,profitEntitlement);
+ const plan=inv.repaymentPlan;
+ const lastContribution=Math.max(1,...inv.tranches.filter(t=>t.amount>0).map(t=>month(t.month)));
+ const first=Math.max(month(plan.startMonth),lastContribution),end=Math.max(first,month(plan.endMonth));
+ const contributions=Array.from({length:end},(_,i)=>sum(inv.tranches.filter(t=>month(t.month)===i+1).map(t=>amount(t.amount))));
+ const rate=amount(inv.rate)/100;
+ const simulate=(payment:number,collect=false)=>{
+  const quantize=collect?round:(n:number)=>n;
+  let principal=0,income=0,shared=false;
+  const repayments:Investment['repayments']=[];
+  for(let m=1;m<=end;m++){
+   principal=quantize(principal+contributions[m-1]);
+   let accrued=0;
+   if(inv.type==='annual')accrued=quantize((principal+(inv.compounding==='monthly'?income:0))*rate/12);
+   else if(inv.type==='fixed')accrued=quantize(contributions[m-1]*rate);
+   else if(!shared&&principal>0){accrued=amount(profitEntitlement);shared=true;}
+   income=quantize(income+accrued);
+   if(m>=first){
+    const due=collect&&m===end?quantize(principal+income):payment;
+    const paidIncome=Math.min(income,due),paidPrincipal=Math.min(principal,Math.max(0,quantize(due-paidIncome)));
+    income=quantize(income-paidIncome);principal=quantize(principal-paidPrincipal);
+    if(collect)repayments.push({id:`equal-${inv.id}-${m}`,month:m,principal:paidPrincipal,income:paidIncome});
+   }
+  }
+  return {remaining:quantize(principal+income),repayments};
+ };
+ let lo=0,hi=simulate(0).remaining;
+ for(let i=0;i<64;i++){const mid=(lo+hi)/2;if(simulate(mid).remaining>1e-8)lo=mid;else hi=mid;}
+ const payment=round(hi),schedule=simulate(payment,true).repayments;
+ const result=calculateManualInvestment({...inv,repayments:schedule,incomePayment:'maturity',maturityMonth:end,autoSettle:true},start,profitEntitlement);
+ if(first!==month(plan.startMonth))result.warnings.push(`Начало равных выплат перенесено на М${first}: сначала должны поступить все взносы.`);
+ if(end!==month(plan.endMonth))result.warnings.push(`Конец равных выплат перенесён на М${end}, чтобы он не был раньше начала.`);
+ return {...result,investment:inv,equalPayment:payment};
 }
 
 /** Operating cash flows remain untouched. This layer adds financing and a two-level profit waterfall. */
