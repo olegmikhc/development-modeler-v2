@@ -160,3 +160,18 @@
 .funding-empty{flex:1;min-height:155px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px 16px;margin-bottom:12px;border:1px dashed #dedee7;border-radius:14px;color:#86868b}.funding-empty>svg{margin-bottom:10px;color:#9daecb}.funding-empty strong{font-size:13px;color:#52525b;font-weight:500}.funding-empty p{font-size:12px;line-height:1.6;max-width:300px;margin:7px 0 0}
 @media(max-width:1200px){.investment-schedules{grid-template-columns:1fr}}
 @media(max-width:600px){.funding-card{padding:16px}.funding-card .investment-row.repayment{grid-template-columns:1fr 1fr 32px}.funding-card .repayment .v-field:first-of-type{grid-column:1/-1}.funding-row-heading{flex-wrap:wrap}.funding-total strong{font-size:25px}}
+
+/* Quiet, meaningful color accents for project resilience. */
+.v-stability-result{padding:22px 24px;border:1px solid #e4e7ed;border-radius:18px;background:#f5f6f8;position:relative;overflow:hidden}
+.v-stability-result:before{content:"";position:absolute;inset:20px auto 20px 0;width:4px;border-radius:0 4px 4px 0;background:#a4a8b2}
+.v-stability-result.is-positive{background:linear-gradient(115deg,#edf8f2,#f8fcfa);border-color:#d8ece1}.v-stability-result.is-positive:before{background:#34a879}.v-stability-result.is-positive>strong{color:#227c58}
+.v-stability-result.is-loss{background:linear-gradient(115deg,#fff0ee,#fff9f8);border-color:#f3dcd6}.v-stability-result.is-loss:before{background:#ce5b4e}.v-stability-result.is-loss>strong{color:#b33f33}
+.v-stability-result>span{color:#626972}.v-stability-result p{margin-bottom:0;color:#626972}.v-stability-result p b{color:#30363c}
+.v-resilience-grid{gap:12px}.v-resilience-grid>div{padding:18px;border-radius:14px;border:1px solid #e9e9ef;background:#f8f8fa;gap:10px}
+.v-resilience-grid .resilience-price{background:#eff5ff;border-color:#dfe9fa}.resilience-price>b{color:#2464ba}
+.v-resilience-grid .resilience-boundary{background:#f3f1fa;border-color:#e8e3f4}.resilience-boundary>b{color:#6c5b9b}
+.v-resilience-grid .resilience-cushion{background:#eff8f3;border-color:#ddeee4}.resilience-cushion>b{color:#277c58}
+.v-resilience-grid .resilience-funding{background:#fff7eb;border-color:#f1e4cc}.resilience-funding>b{color:#94631c}
+.v-resilience-grid .resilience-loss{background:#fff1ee;border-color:#f4ddd6}.resilience-loss>b{color:#b33f33}
+.v-resilience-grid small{color:#73757e}.v-resilience-grid span{color:#62646d}.v-resilience-grid b{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+@media(max-width:600px){.v-stability-result{padding:20px}.v-resilience-grid>div{padding:16px}}
